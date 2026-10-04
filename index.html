@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Yay! Town Player Bridge</title>
+
+  <style>
+    html,body{
+      margin:0;
+      width:100%;
+      height:100%;
+      background:#111;
+      overflow:hidden;
+      font-family:Arial,sans-serif;
+    }
+
+    #player{
+      width:100%;
+      height:100%;
+    }
+
+    #status{
+      position:absolute;
+      left:8px;
+      top:8px;
+      background:rgba(0,0,0,.65);
+      color:white;
+      padding:6px 9px;
+      border-radius:6px;
+      font-size:13px;
+      z-index:2;
+      pointer-events:none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="player"></div>
+  <div id="status">Loading YouTube...</div>
+
+  <script>
+    const VIDEO_ID = 'p779LRtmuYo';
+    const YAYTOWN_ORIGIN = 'https://maisueme-spec.github.io';
+
+    let player = null;
+    let lastState = -99;
+    let godotPort = null;
+
+    window.addEventListener('message', e => {
+      if (
+        e.data === 'init_port' &&
+        e.ports &&
+        e.ports[0]
+      ) {
+        godotPort = e.ports[0];
+      }
+    });
+
+    function send(obj) {
+      const s = JSON.stringify(obj);
+
+      try {
+        if (godotPort) {
+          godotPort.postMessage(s);
+          return;
+        }
+      } catch (e) {}
+
+      try {
+        if (window.ipc && window.ipc.postMessage) {
+          window.ipc.postMessage(s);
+        }
+      } catch (e) {}
+    }
+
+    function onYouTubeIframeAPIReady() {
+
+      player = new YT.Player('player', {
+
+        videoId: VIDEO_ID,
+
+        playerVars: {
+          playsinline: 1,
+          controls: 1,
+          rel: 0,
+          fs: 0,
+          origin: YAYTOWN_ORIGIN
+        },
+
+        events: {
+
+          onReady: () => {
+            document.getElementById('status').textContent =
+              'YouTube ready - press Play';
+
+            send({
+              type: 'ready'
+            });
+          },
+
+          onStateChange: e => {
+            lastState = e.data;
+
+            send({
+              type: 'state',
+              state: e.data
+            });
+          },
+
+          onError: e => {
+
+            document.getElementById('status').textContent =
+              'YouTube error ' + e.data;
+
+            send({
+              type: 'error',
+              code: e.data
+            });
+          }
+        }
+      });
+    }
+
+    setInterval(() => {
+
+      if (!player || !player.getCurrentTime)
+        return;
+
+      let t = 0;
+      let d = 0;
+
+      try {
+        t = player.getCurrentTime() || 0;
+        d = player.getDuration() || 0;
+      }
+      catch (e) {
+        return;
+      }
+
+      document.getElementById('status').textContent =
+        'YouTube time ' + t.toFixed(2) + 's';
+
+      send({
+        type: 'time',
+        time: t,
+        duration: d,
+        state: lastState
+      });
+
+    }, 100);
+
+    const tag = document.createElement('script');
+
+    tag.src =
+      'https://www.youtube.com/iframe_api';
+
+    document.head.appendChild(tag);
+
+  </script>
+
+</body>
+</html>
